@@ -1,0 +1,115 @@
+%define _user appuser
+%define _group appuser
+%define _prefix /apps/soft/qianbao-php-5.6.37
+%define _dep_path /usr/local
+Name: qianbao-php
+Version: 5.6.37
+Release: 1%{?dist}
+Summary: qianbao-php-5.6.37
+Group: Development/Languages
+License: GPLv2
+URL: http://www.php.net
+Packager: xuzhigui@qianbao.com
+Vendor: Qianbao-OPS
+Source0: %{name}-%{version}.tar.gz
+Source1: libiconv-1.14.tar.gz
+BuildRoot: %_topdir/BUILDROOT
+BuildRequires:  gcc,gcc-c++,make,cmake,ncurses-devel,bison,openssl-devel,libcurl-devel,gdbm-devel,openldap-devel,libtidy-devel,zlib-devel,libxml2-devel,libpng-devel
+Requires: curl,curl-devel,libjpeg,libjpeg-devel,libpng,libpng-devel,freetype,freetype-devel,pcre,pcre-devel,ncurses-devel
+Requires: mhash
+Requires: mcrypt
+Requires: php-bcmath
+Requires: bzip2-devel
+Requires: libxml2-devel
+Requires: libtool
+Requires: libtool-ltdl,openssl-devel,openssl
+
+%description
+Qianbao-php version 5.6.37, if you have any other request, please contact xuzhigui@qianbao.com or ops
+
+%prep
+%setup -q -b 1 -b 0
+
+%build
+cd ../libiconv-1.14
+./configure --prefix=%{_dep_path}/libiconv
+CFLAGS="-O3 -fPIC"
+make %{?_smp_mflags}
+
+cd ../qianbao-php-5.6.37
+%configure --prefix=%{_prefix} --with-config-file-path=%{_prefix}/etc \
+                    --with-fpm-user=%{_user} --with-fpm-group=%{_group} \
+                    --with-bz2 --with-curl --enable-ftp --enable-sockets --disable-ipv6 \
+                    --with-gd --with-jpeg-dir --with-png-dir --enable-sysvsem --enable-sysvshm \
+                    --with-freetype-dir --enable-gd-native-ttf \
+                    --with-iconv-dir=%{dep_path}/libiconv --enable-mbstring --enable-calendar \
+                    --with-gettext --with-ldap --with-libxml-dir --with-zlib \
+                    --with-pdo-mysql=mysqlnd --with-mysqli=mysqlnd --with-mysql=mysqlnd \
+                    --enable-dom --enable-xml --enable-fpm --with-libdir=lib64 --enable-bcmath \
+                    --enable-sysvsem --enable-inline-optimization --with-curl --enable-mbregex \
+                    --enable-fileinfo --enable-xml --with-mcrypt --with-xmlrpc --with-mhash \
+                    --enable-zip --enable-soap --with-openssl
+
+make %{?_smp_mflags}
+
+%install
+rm -rf %{buildroot}
+cd ../libiconv-1.14
+make install DESTDIR=%{buildroot}
+
+cd ../qianbao-php-5.6.37
+make install DESTDIR=%{buildroot}
+rm -rf %{buildroot}/{.channels,.depdb,.depdblock,.filemap,.lock,.registry}
+%{__install} -p -D -m 0755 sapi/fpm/init.d.php-fpm %{buildroot}/etc/init.d/php-fpm
+%{__install} -p -D -m 0644 php.ini-production %{buildroot}/%{_prefix}/etc/php.ini
+%{__install} -p -D -m 0644 sapi/fpm/php-fpm.conf  %{buildroot}/%{_prefix}/etc/php-fpm.conf
+
+QA_SKIP_BUILD_ROOT=1
+QA_RPATHS=$[ 0x0001|0x0010 ]
+export QA_SKIP_BUILD_ROOT
+export QA_RPATHS
+
+%pre
+
+%post
+cat >/etc/ld.so.conf.d/php.conf <<EOF
+{_dep_path}/libiconv/lib
+EOF
+/sbin/ldconfig > /dev/null 2>&1
+if [ $1 == 1 -a -z "`grep ^%{_user} /etc/passwd`" ]; then    # $1有3个值，代表动作，安装类型，处理类型
+    groupadd %{_group} -g 500                                # 1：表示安装
+    useradd -u 500 -g 500 -m %{_user}                        # 2：表示升级
+fi  
+
+%postun
+if [ "$1" = 0 ] ; then
+        /bin/rm -rf %{php_path}
+        /bin/rm -rf %{dep_path}/libmcrypt
+        /bin/rm -rf %{dep_path}/libiconv
+        /bin/rm -rf %{dep_path}/libltdl
+        /bin/rm -rf %{dep_path}/libpng
+        /bin/rm -rf %{dep_path}/libxml2
+        /bin/rm -rf %{dep_path}/mysql
+        /bin/rm -rf %{dep_path}/freetype
+        /bin/rm -rf %{dep_path}/gd
+        /bin/rm -rf /etc/profile.d/php.sh
+        /bin/rm -rf /etc/ld.so.conf.d/php.conf
+fi
+
+%clean
+rm -rf %{buildroot}
+
+%files
+%defattr(-,root,root,-)
+%{_dep_path}/libiconv
+%{_prefix}
+%config(noreplace) %{_prefix}/etc/php-fpm.conf
+%config(noreplace) %{_prefix}/etc/php.ini
+%attr(0755,root,root) /etc/init.d/php-fpm
+
+%doc
+
+%changelog
+* Tue Aug 14 2018 xuzhigui 5.6.37-1
+- Initial version
+
